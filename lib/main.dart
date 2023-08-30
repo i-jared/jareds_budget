@@ -1,3 +1,4 @@
+import 'package:budget/pages/transaction_history.dart';
 import 'package:budget/state/home.dart';
 import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,14 @@ class MyHomePage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Budget'),
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.history),
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const TransactionHistory())))
+        ],
       ),
       body: Center(
         child: Padding(
@@ -46,23 +55,37 @@ class MyHomePage extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               TextField(
-                inputFormatters: [CurrencyTextInputFormatter(symbol: '\$')],
-                keyboardType: TextInputType.number,
-                controller: state.controller,
-                style: Theme.of(context).textTheme.headlineLarge,
-              ),
+                  autofocus: true,
+                  inputFormatters: [CurrencyTextInputFormatter(symbol: '\$')],
+                  keyboardType: TextInputType.number,
+                  controller: state.controller,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 30, fontWeight: FontWeight.bold)),
               const SizedBox(height: 40),
-              DropdownButton<Category>(
-                value: state.category,
-                onChanged: (Category? newValue) {
-                  state.category = newValue ?? state.category;
-                },
-                items: Category.values.map((Category category) {
-                  return DropdownMenuItem<Category>(
-                    value: category,
-                    child: Text(category.toString().split('.').last),
-                  );
-                }).toList(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  DropdownButton<Category>(
+                    value: state.category,
+                    onChanged: (Category? newValue) {
+                      state.category = newValue ?? state.category;
+                    },
+                    items: Category.values.map((Category category) {
+                      return DropdownMenuItem<Category>(
+                        value: category,
+                        child: Text(category.toString().split('.').last),
+                      );
+                    }).toList(),
+                  ),
+                  IconButton(
+                      icon: const Icon(Icons.calendar_month),
+                      onPressed: () async => state.time = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay(
+                              hour: DateTime.now().hour,
+                              minute: DateTime.now().minute)))
+                ],
               ),
               const SizedBox(height: 40),
               TextField(

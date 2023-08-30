@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:budget/data/transaction.dart';
+import 'package:budget/extensions/timeofday.dart';
 import 'package:flutter/material.dart';
 import 'package:icloud_storage/icloud_storage.dart';
 import 'dart:io';
@@ -66,6 +68,12 @@ class HomeState extends ChangeNotifier {
   TextEditingController controller;
   TextEditingController descriptionController;
   Category _category;
+  List<Transaction>? transactions;
+
+  late StreamSubscription downloadProgressSub;
+  var downloadCompleter = Completer<void>();
+
+  TimeOfDay? _time;
   HomeState()
       : controller = TextEditingController(),
         descriptionController = TextEditingController(),
@@ -81,10 +89,46 @@ class HomeState extends ChangeNotifier {
     notifyListeners();
   }
 
+  //getters and setters for time
+  TimeOfDay? get time => _time;
+  set time(TimeOfDay? time) {
+    _time = time;
+    notifyListeners();
+  }
+
+  Future<void> loadHistory() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = '${directory.path}/budget.csv';
+    if (!downloadCompleter.isCompleted) {
+      await downloadFile(path);
+    }
+    final file = File(path);
+    bool fileExists = await file.exists();
+
+    if (!fileExists) {
+      await file.create();
+      await file.writeAsString('Description,Amount,Category,Datetime\n');
+    }
+    // Read existing content
+    // Write the updated content back to the file
+    // Append the new line
+    String content = await file.readAsString();
+    List<String> lines =
+        content.split('\n').where((l) => l.isNotEmpty).skip(1).toList();
+    transactions = lines.map<Transaction>((line) {
+      var vals = line.split(',');
+      return Transaction(
+          description: vals[0],
+          amount: double.parse(vals[1]),
+          category: stringToCategory(vals[2]),
+          date: DateTime.parse(vals[3]));
+    }).toList();
+
+    notifyListeners();
+  }
+
   Future<void> addTransaction() async {
     late StreamSubscription uploadProgressSub;
-    late StreamSubscription downloadProgressSub;
-    var downloadCompleter = Completer<void>();
     var uploadCompleter = Completer<void>();
     final directory = await getApplicationDocumentsDirectory();
     final path = '${directory.path}/budget.csv';
@@ -94,28 +138,7 @@ class HomeState extends ChangeNotifier {
     String description = descriptionController.text;
 
     // use icloud_storage package to read a csv from iCloud Drive and create it if it doesn't exist
-
-    try {
-      await ICloudStorage.download(
-          containerId: 'iCloud.hugepuppy.budget',
-          relativePath: 'budget.csv',
-          destinationFilePath: path,
-          onProgress: (p) {
-            downloadProgressSub = p.listen(
-              (val) {},
-              onDone: () {
-                downloadCompleter.complete();
-              },
-              onError: (err) {
-                downloadCompleter.completeError(err);
-              },
-              cancelOnError: true,
-            );
-          });
-    } catch (e, s) {
-      downloadCompleter.complete(e);
-    }
-    await downloadCompleter.future;
+    await downloadFile(path);
 
     // Check if the file exists
     // If the file doesn't exist, create a new one and add headers
@@ -124,14 +147,14 @@ class HomeState extends ChangeNotifier {
 
     if (!fileExists) {
       await file.create();
-      await file.writeAsString('Description,Amount,Category\n');
+      await file.writeAsString('Description,Amount,Category,Datetime\n');
     }
     // Read existing content
     // Write the updated content back to the file
     // Append the new line
     String content = await file.readAsString();
     content +=
-        '$description,${amount.toString()},${categoryToString(category)}\n';
+        '$description,${amount.toString()},${categoryToString(category)},${time == null ? DateTime.now().toIso8601String() : time!.toDateTime().toIso8601String()}\n';
     await file.writeAsString(content);
 
     // upload csv file to iCloud Drive
@@ -139,7 +162,7 @@ class HomeState extends ChangeNotifier {
       await ICloudStorage.upload(
           containerId: 'iCloud.hugepuppy.budget',
           filePath: path,
-          destinationRelativePath: 'budget.csv',
+          destinationRelativePath: 'Documents/budget.csv',
           onProgress: (p) {
             uploadProgressSub = p.listen(
               (val) {},
@@ -152,8 +175,8 @@ class HomeState extends ChangeNotifier {
               cancelOnError: true,
             );
           });
-    } catch (e, s) {
-      uploadCompleter.complete(e);
+    } catch (e) {
+      uploadCompleter.complete();
     }
 
     await uploadCompleter.future;
@@ -172,5 +195,31 @@ class HomeState extends ChangeNotifier {
     controller.dispose();
     descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> downloadFile(
+    String path,
+  ) async {
+    try {
+      await ICloudStorage.download(
+          containerId: 'iCloud.hugepuppy.budget',
+          relativePath: 'Documents/budget.csv',
+          destinationFilePath: path,
+          onProgress: (p) {
+            downloadProgressSub = p.listen(
+              (val) {},
+              onDone: () {
+                downloadCompleter.complete();
+              },
+              onError: (err) {
+                downloadCompleter.completeError(err);
+              },
+              cancelOnError: true,
+            );
+          });
+    } catch (e) {
+      downloadCompleter.complete();
+    }
+    await downloadCompleter.future;
   }
 }
